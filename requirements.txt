@@ -1,0 +1,4 @@
+# Runtime dependencies
+typer>=0.12
+pydantic>=2.0
+rich>=13.0
