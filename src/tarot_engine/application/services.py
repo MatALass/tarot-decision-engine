@@ -9,6 +9,7 @@ from tarot_engine.application.dto import (
     MoveEvaluationResponse,
 )
 from tarot_engine.decision.evaluator import evaluate_contracts
+from tarot_engine.decision.move_explainer import explain_move
 from tarot_engine.decision.move_policies import ExpectedScoreMovePolicy, MoveDecisionPolicy
 from tarot_engine.decision.policies import (
     BalancedPolicy,
@@ -61,6 +62,7 @@ def evaluate_move(request: MoveEvaluationRequest) -> MoveEvaluationResponse:
     return MoveEvaluationResponse(
         recommendation=recommendation,
         evaluations=tuple(ranked.evaluation for ranked in recommendation.ranked_actions),
+        explanation=explain_move(recommendation),
     )
 
 

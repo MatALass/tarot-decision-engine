@@ -281,9 +281,10 @@ def _render_contract_json(response: EvaluationResponse) -> None:
 
 def _render_move_text(response: MoveEvaluationResponse) -> None:
     rec = response.recommendation
+    explanation = response.explanation
     console.print()
     console.print(Panel(
-        f"[bold green]Recommended card: {rec.recommended_action.card}[/bold green]\n"
+        f"[bold green]Recommended card: {format_card_token(rec.recommended_action.card)}[/bold green]\n"
         f"Played by player: [cyan]{rec.recommended_action.player_index}[/cyan]\n"
         f"Policy: [cyan]{rec.policy_name}[/cyan]",
         title="[bold]Tarot Move Recommendation[/bold]",
@@ -291,6 +292,12 @@ def _render_move_text(response: MoveEvaluationResponse) -> None:
     ))
     console.print()
     console.print(f"[bold]Rationale:[/bold] {rec.rationale}")
+    console.print(f"[bold]Explanation:[/bold] {explanation.summary}")
+    console.print(f"[bold]Risk:[/bold] {explanation.risk_comment}")
+    if explanation.alternatives_summary:
+        console.print("[bold]Alternatives:[/bold]")
+        for line in explanation.alternatives_summary:
+            console.print(f"  - {line}")
     console.print()
     table = Table(title="Move Evaluations", box=box.ROUNDED,
                   show_header=True, header_style="bold cyan")
@@ -318,6 +325,7 @@ def _render_move_text(response: MoveEvaluationResponse) -> None:
 
 def _render_move_json(response: MoveEvaluationResponse) -> None:
     rec = response.recommendation
+    explanation = response.explanation
     payload = {
         "recommended_action": {
             "player_index": rec.recommended_action.player_index,
@@ -325,6 +333,13 @@ def _render_move_json(response: MoveEvaluationResponse) -> None:
         },
         "policy_name": rec.policy_name,
         "rationale": rec.rationale,
+        "explanation": {
+            "summary": explanation.summary,
+            "top_gap_expected_score": round(explanation.top_gap_expected_score, 2),
+            "top_gap_win_rate": round(explanation.top_gap_win_rate, 4),
+            "risk_comment": explanation.risk_comment,
+            "alternatives_summary": list(explanation.alternatives_summary),
+        },
         "actions": [
             {
                 "rank": ranked.rank,

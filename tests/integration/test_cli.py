@@ -149,6 +149,7 @@ class TestMoveRecommendation:
         data = json.loads(result.output)
         assert "recommended_action" in data
         assert "actions" in data
+        assert "explanation" in data
 
     def test_json_recommended_action_player_matches(self) -> None:
         data = json.loads(runner.invoke(app, MOVE_BASE + ["--output", "json"]).output)
@@ -181,3 +182,9 @@ class TestErrorHandling:
             "--next-player-index", "0",
         ])
         assert result.exit_code != 0
+
+
+    def test_text_output_contains_explanation_block(self) -> None:
+        out = runner.invoke(app, MOVE_BASE).output
+        assert "Explanation:" in out
+        assert "Risk:" in out

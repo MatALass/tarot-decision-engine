@@ -10,6 +10,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, field_validator
 
 from tarot_engine.decision.models import ContractEvaluation, DecisionRecommendation
+from tarot_engine.decision.move_explainer import MoveExplanation
 from tarot_engine.domain.enums import Contract
 from tarot_engine.simulation.action_evaluator import ActionEvaluation, MoveRecommendation
 
@@ -102,3 +103,4 @@ class MoveEvaluationResponse(BaseModel):
 
     recommendation: MoveRecommendation
     evaluations: tuple[ActionEvaluation, ...]
+    explanation: MoveExplanation
