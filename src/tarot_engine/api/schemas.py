@@ -64,6 +64,7 @@ class ApiMoveEvaluationRequest(BaseModel):
     n_samples: int = Field(default=200, ge=1, le=100_000)
     seed: int = Field(default=0)
     policy: str = Field(default="expected_score")
+    risk_weight: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 class ApiActionReference(BaseModel):
@@ -74,11 +75,15 @@ class ApiActionReference(BaseModel):
 class ApiActionEvaluationItem(BaseModel):
     action: ApiActionReference
     expected_score: float
+    robust_score: float
+    downside_risk: float
     win_rate: float
     score_std: float
+    score_q05: float
     score_q10: float
     score_q50: float
     score_q90: float
+    score_q95: float
     n_samples: int
 
 
@@ -86,6 +91,7 @@ class ApiRankedActionItem(BaseModel):
     rank: int
     action: ApiActionReference
     expected_score: float
+    robust_score: float
     win_rate: float
 
 

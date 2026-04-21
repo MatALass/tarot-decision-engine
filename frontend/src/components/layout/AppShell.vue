@@ -1,20 +1,14 @@
 <script setup lang="ts">
-import { storeToRefs } from 'pinia'
-
 import AppTopbar from '@/components/layout/AppTopbar.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
-import { useUiStore } from '@/stores/ui'
-
-const uiStore = useUiStore()
-const { appTitle, appSubtitle } = storeToRefs(uiStore)
 </script>
 
 <template>
-  <div class="min-h-screen bg-surface text-slate-100">
-    <AppTopbar :title="appTitle" :subtitle="appSubtitle" />
-    <div class="mx-auto flex max-w-7xl gap-6 px-6 py-6">
+  <div class="min-h-screen bg-surface font-body text-text" style="background: radial-gradient(ellipse at 25% 0%, #13172a 0%, #08090d 65%);">
+    <AppTopbar />
+    <div class="mx-auto flex max-w-[1440px] gap-5 px-5 py-5">
       <AppSidebar />
-      <main class="min-h-[calc(100vh-8rem)] flex-1 rounded-3xl border border-border bg-panel/80 p-6 shadow-soft backdrop-blur">
+      <main class="min-h-[calc(100vh-5rem)] flex-1 overflow-hidden rounded-2xl panel-base p-7 animate-fade-in">
         <slot />
       </main>
     </div>

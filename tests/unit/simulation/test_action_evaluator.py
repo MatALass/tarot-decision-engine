@@ -99,3 +99,20 @@ class TestEvaluateActions:
         )
 
         assert evaluations_1 == evaluations_2
+
+
+    def test_evaluations_include_robust_metrics(self) -> None:
+        deal = sample_deal(average_hand(), random.Random(321))
+        world_state, _ = build_initial_world_state(deal, Contract.GARDE)
+        game_state = world_state.game_state
+        candidate_actions = legal_actions(game_state)[:2]
+
+        evaluations = evaluate_actions(
+            game_state,
+            config=EvaluatorConfig(n_samples=3, seed=17),
+            candidate_actions=candidate_actions,
+        )
+
+        assert all(ev.robust_score == ev.score_q10 for ev in evaluations)
+        assert all(ev.downside_risk >= 0.0 for ev in evaluations)
+        assert all(ev.score_q05 <= ev.score_q10 <= ev.score_q90 <= ev.score_q95 for ev in evaluations)

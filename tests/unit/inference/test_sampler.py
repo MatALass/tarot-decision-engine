@@ -10,7 +10,12 @@ from tarot_engine.domain.rules import TrickCard
 from tarot_engine.domain.trick import CompletedTrick, TrickHistory
 from tarot_engine.inference.belief_state import build_belief_state
 from tarot_engine.inference.consistency import world_matches_belief_state
-from tarot_engine.inference.sampler import sample_compatible_world, sample_compatible_worlds
+from tarot_engine.inference.sampler import (
+    sample_compatible_world,
+    sample_compatible_worlds,
+    sample_weighted_world,
+    sample_weighted_worlds,
+)
 
 
 
@@ -81,3 +86,13 @@ class TestSampler:
 
         assert len(worlds) == 3
         assert all(world.game_state == game_state for world in worlds)
+
+
+    def test_weighted_world_sampling_returns_likelihoods(self) -> None:
+        game_state = _make_sampling_state()
+
+        samples = sample_weighted_worlds(game_state, n_samples=2, rng=random.Random(19))
+
+        assert len(samples) == 2
+        assert all(sample.likelihood.weight > 0.0 for sample in samples)
+        assert all(sample.world_state.game_state == game_state for sample in samples)

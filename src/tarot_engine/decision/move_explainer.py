@@ -63,6 +63,7 @@ def _summary(
         f"{card} is recommended by the {policy_name} policy. "
         f"Expected score {best.expected_score:+.2f} vs {second.expected_score:+.2f} for the next best action "
         f"(gap {best.expected_score - second.expected_score:+.2f}). "
+        f"Robust score {best.robust_score:+.2f} vs {second.robust_score:+.2f}. "
         f"Win rate {best.win_rate:.1%} vs {second.win_rate:.1%}. {risk_comment}"
     )
 
@@ -70,11 +71,12 @@ def _summary(
 
 def _risk_comment(best: ActionEvaluation) -> str:
     interdecile = best.score_q90 - best.score_q10
+    tail = f"Q05 {best.score_q05:+.1f}, Q10 {best.score_q10:+.1f}, downside {best.downside_risk:+.1f}"
     if interdecile <= 15:
-        return f"Low dispersion profile (Q10 {best.score_q10:+.1f}, Q90 {best.score_q90:+.1f})."
+        return f"Low dispersion profile ({tail}; Q90 {best.score_q90:+.1f})."
     if interdecile <= 35:
-        return f"Moderate dispersion profile (Q10 {best.score_q10:+.1f}, Q90 {best.score_q90:+.1f})."
-    return f"High dispersion profile (Q10 {best.score_q10:+.1f}, Q90 {best.score_q90:+.1f})."
+        return f"Moderate dispersion profile ({tail}; Q90 {best.score_q90:+.1f})."
+    return f"High dispersion profile ({tail}; Q90 {best.score_q90:+.1f})."
 
 
 

@@ -8,6 +8,7 @@ from tarot_engine.domain.cards import Card
 from tarot_engine.domain.deck import DOG_SIZE, N_PLAYERS, generate_deck
 from tarot_engine.domain.game_state import GameState
 from tarot_engine.inference.constraints import HardConstraints, derive_hard_constraints
+from tarot_engine.inference.posterior import Posterior, build_posterior
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class BeliefState:
     remaining_card_counts_by_player: tuple[int, ...]
     impossible_cards_by_player: tuple[frozenset[Card], ...]
     dog_impossible_cards: frozenset[Card]
+    hard_constraints: HardConstraints
     dog_card_count: int = DOG_SIZE
 
     def __post_init__(self) -> None:
@@ -37,6 +39,10 @@ class BeliefState:
             )
         if self.dog_card_count < 0:
             raise ValueError(f"dog_card_count must be >= 0, got {self.dog_card_count}.")
+        if self.hard_constraints.observed_player_index != self.observed_player_index:
+            raise ValueError(
+                "hard_constraints and BeliefState must refer to the same observed player."
+            )
         if len(set(self.known_remaining_hand)) != len(self.known_remaining_hand):
             raise ValueError("known_remaining_hand cannot contain duplicate cards.")
         if len(set(self.played_cards)) != len(self.played_cards):
@@ -56,6 +62,11 @@ class BeliefState:
             raise ValueError(
                 f"BeliefState must account for exactly {len(generate_deck())} cards, got {accounted_cards}."
             )
+
+
+    @property
+    def posterior(self) -> Posterior:
+        return build_posterior(self)
 
     @property
     def known_cards(self) -> frozenset[Card]:
@@ -87,6 +98,7 @@ def build_belief_state(game_state: GameState) -> BeliefState:
         remaining_card_counts_by_player=remaining_card_counts,
         impossible_cards_by_player=constraints.impossible_cards_by_player,
         dog_impossible_cards=constraints.dog_impossible_cards,
+        hard_constraints=constraints,
     )
 
 
@@ -102,6 +114,7 @@ def build_belief_state_from_constraints(
         remaining_card_counts_by_player=_remaining_card_counts_by_player(game_state),
         impossible_cards_by_player=constraints.impossible_cards_by_player,
         dog_impossible_cards=constraints.dog_impossible_cards,
+        hard_constraints=constraints,
     )
 
 

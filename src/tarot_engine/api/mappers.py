@@ -28,6 +28,7 @@ def to_api_contract_response(response: EvaluationResponse) -> ApiContractEvaluat
                 rank=item.rank,
                 contract=item.contract.value,
                 expected_score=item.evaluation.expected_score,
+                robust_score=item.evaluation.robust_score,
                 win_rate=item.evaluation.win_rate,
             )
             for item in recommendation.ranked_contracts
@@ -67,6 +68,7 @@ def to_api_move_response(response: MoveEvaluationResponse) -> ApiMoveEvaluationR
                     card=format_card_token(item.evaluation.action.card),
                 ),
                 expected_score=item.evaluation.expected_score,
+                robust_score=item.evaluation.robust_score,
                 win_rate=item.evaluation.win_rate,
             )
             for item in recommendation.ranked_actions
@@ -78,11 +80,15 @@ def to_api_move_response(response: MoveEvaluationResponse) -> ApiMoveEvaluationR
                     card=format_card_token(item.action.card),
                 ),
                 expected_score=item.expected_score,
+                robust_score=item.robust_score,
+                downside_risk=item.downside_risk,
                 win_rate=item.win_rate,
                 score_std=item.score_std,
+                score_q05=item.score_q05,
                 score_q10=item.score_q10,
                 score_q50=item.score_q50,
                 score_q90=item.score_q90,
+                score_q95=item.score_q95,
                 n_samples=item.n_samples,
             )
             for item in response.evaluations

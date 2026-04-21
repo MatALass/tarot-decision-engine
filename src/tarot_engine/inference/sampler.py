@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 
 from tarot_engine.domain.cards import Card
 from tarot_engine.domain.game_state import GameState, WorldState
 from tarot_engine.inference.belief_state import BeliefState, build_belief_state
 from tarot_engine.inference.consistency import validate_world_against_belief_state
+from tarot_engine.inference.likelihood import WorldLikelihood, score_world_likelihood
+
+
+@dataclass(frozen=True)
+class WeightedWorldSample:
+    """One sampled world together with its plausibility score."""
+
+    world_state: WorldState
+    likelihood: WorldLikelihood
 
 
 
@@ -16,7 +26,22 @@ def sample_compatible_world(
     rng: random.Random,
     belief_state: BeliefState | None = None,
 ) -> WorldState:
-    """Sample one complete WorldState compatible with the observable state."""
+    """Sample one complete WorldState compatible with the observable state.
+
+    The sampler is now weighted by posterior marginals instead of treating all
+    compatible destinations uniformly. This preserves compatibility while
+    producing more plausible hidden worlds on average.
+    """
+    return sample_weighted_world(game_state, rng, belief_state).world_state
+
+
+
+def sample_weighted_world(
+    game_state: GameState,
+    rng: random.Random,
+    belief_state: BeliefState | None = None,
+) -> WeightedWorldSample:
+    """Sample one compatible world and return its likelihood diagnostics."""
     if belief_state is None:
         belief_state = build_belief_state(game_state)
     if belief_state.observed_player_index != game_state.context.player_index:
@@ -36,7 +61,8 @@ def sample_compatible_world(
     slot_capacity[("dog", None)] = belief_state.dog_card_count
 
     rng.shuffle(unknown_cards)
-    if not _assign_unknown_cards(unknown_cards, slot_capacity, assignment, belief_state, rng):
+    posterior = belief_state.posterior
+    if not _assign_unknown_cards(unknown_cards, slot_capacity, assignment, belief_state, posterior, rng):
         raise ValueError("Failed to sample a world compatible with the current BeliefState.")
 
     remaining_hands = []
@@ -51,7 +77,10 @@ def sample_compatible_world(
         dog=tuple(assignment[("dog", None)]),
     )
     validate_world_against_belief_state(world_state, belief_state)
-    return world_state
+    return WeightedWorldSample(
+        world_state=world_state,
+        likelihood=score_world_likelihood(world_state, belief_state),
+    )
 
 
 
@@ -70,11 +99,27 @@ def sample_compatible_worlds(
 
 
 
+def sample_weighted_worlds(
+    game_state: GameState,
+    n_samples: int,
+    rng: random.Random,
+    belief_state: BeliefState | None = None,
+) -> tuple[WeightedWorldSample, ...]:
+    """Sample multiple weighted compatible worlds."""
+    if n_samples < 1:
+        raise ValueError(f"n_samples must be >= 1, got {n_samples}.")
+    if belief_state is None:
+        belief_state = build_belief_state(game_state)
+    return tuple(sample_weighted_world(game_state, rng, belief_state) for _ in range(n_samples))
+
+
+
 def _assign_unknown_cards(
     unknown_cards: list[Card],
     slot_capacity: dict[tuple[str, int | None], int],
     assignment: dict[tuple[str, int | None], list[Card]],
     belief_state: BeliefState,
+    posterior,
     rng: random.Random,
 ) -> bool:
     if not unknown_cards:
@@ -94,11 +139,11 @@ def _assign_unknown_cards(
 
     assert best_index is not None and best_destinations is not None
     card = unknown_cards.pop(best_index)
-    rng.shuffle(best_destinations)
-    for destination in best_destinations:
+    ordered_destinations = _weighted_destination_order(card, best_destinations, posterior, rng)
+    for destination in ordered_destinations:
         cards = assignment.setdefault(destination, [])
         cards.append(card)
-        if _assign_unknown_cards(unknown_cards, slot_capacity, assignment, belief_state, rng):
+        if _assign_unknown_cards(unknown_cards, slot_capacity, assignment, belief_state, posterior, rng):
             return True
         cards.pop()
     unknown_cards.insert(best_index, card)
@@ -127,3 +172,24 @@ def _allowed_destinations(
             continue
         destinations.append(slot)
     return destinations
+
+
+
+def _weighted_destination_order(card, destinations, posterior, rng):
+    remaining = list(destinations)
+    ordered: list[tuple[str, int | None]] = []
+    while remaining:
+        weights = [_destination_weight(card, destination, posterior) for destination in remaining]
+        destination = rng.choices(remaining, weights=weights, k=1)[0]
+        ordered.append(destination)
+        remaining.remove(destination)
+    return ordered
+
+
+
+def _destination_weight(card, destination, posterior) -> float:
+    location_type, player_index = destination
+    if location_type == "dog":
+        return max(posterior.probability_card_in_dog(card), 1e-12)
+    assert player_index is not None
+    return max(posterior.probability_card_in_player(card, player_index), 1e-12)

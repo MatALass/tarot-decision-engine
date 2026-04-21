@@ -70,6 +70,7 @@ class MoveEvaluationRequest(BaseModel):
     n_samples: int = Field(default=200, ge=1, le=100_000)
     seed: int = Field(default=0)
     policy: str = Field(default="expected_score")
+    risk_weight: float = Field(default=0.5, ge=0.0, le=1.0)
 
     @field_validator("remaining_hand_str")
     @classmethod
@@ -81,7 +82,7 @@ class MoveEvaluationRequest(BaseModel):
     @field_validator("policy")
     @classmethod
     def move_policy_must_be_valid(cls, v: str) -> str:
-        valid = {"expected_score"}
+        valid = {"expected_score", "robust_score", "balanced"}
         if v not in valid:
             raise ValueError(
                 f"Unknown move policy '{v}'. Valid options: {', '.join(sorted(valid))}."

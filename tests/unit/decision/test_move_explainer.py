@@ -7,18 +7,23 @@ from tarot_engine.domain.cards import Card
 from tarot_engine.simulation.action_evaluator import ActionEvaluation
 
 
+
 def _evaluation(card: Card, expected_score: float, win_rate: float, score_std: float, q10: float, q50: float, q90: float) -> ActionEvaluation:
     return ActionEvaluation(
         action=PlayAction(player_index=0, card=card),
         n_samples=10,
         win_rate=win_rate,
         expected_score=expected_score,
+        robust_score=q10,
+        downside_risk=max(0.0, expected_score - q10),
         score_std=score_std,
         score_min=int(q10 - 5),
         score_max=int(q90 + 5),
+        score_q05=q10,
         score_q10=q10,
         score_q50=q50,
         score_q90=q90,
+        score_q95=q90,
     )
 
 

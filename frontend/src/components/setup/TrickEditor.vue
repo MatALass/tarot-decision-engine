@@ -26,74 +26,82 @@ const usedSet = computed(() => new Set(props.usedTokens))
 function onCardChange(index: number, value: string): void {
   emit('updateCard', index, value === '' ? null : value)
 }
-
 function onPlayerChange(index: number, value: string): void {
   emit('updatePlayer', index, value === '' ? null : Number(value))
 }
-
 function isCardDisabled(token: string, currentToken: string | null): boolean {
   return usedSet.value.has(token) && currentToken !== token
 }
+
+const filledCount = computed(() =>
+  props.modelValue.entries.filter((e) => e.card !== null).length
+)
 </script>
 
 <template>
-  <div class="rounded-3xl border border-border bg-slate-950/40 p-6">
-    <div class="flex items-start justify-between gap-6">
+  <div class="rounded-2xl panel-base overflow-hidden">
+    <div class="flex items-start justify-between gap-4 px-5 py-4" style="border-bottom: 1px solid #1e2538;">
       <div>
-        <h3 class="text-lg font-medium text-white">{{ title }}</h3>
-        <p class="mt-2 text-sm text-slate-400">{{ description }}</p>
+        <div class="flex items-center gap-2">
+          <h3 class="font-display text-sm font-semibold tracking-wider text-gold-light">{{ title }}</h3>
+          <span class="rounded-full bg-border px-2 py-0.5 text-[10px] font-medium text-subtle">{{ filledCount }}/5</span>
+        </div>
+        <p class="mt-1 text-xs text-subtle">{{ description }}</p>
       </div>
       <button
         v-if="removable"
         type="button"
-        class="rounded-2xl border border-border px-3 py-2 text-sm text-slate-300 transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-100"
+        class="rounded-lg border border-ruby/20 px-3 py-1.5 text-xs text-ruby/70 transition hover:bg-ruby/10 hover:text-ruby hover:border-ruby/40"
         @click="emit('remove')"
       >
-        Remove
+        Supprimer
       </button>
     </div>
 
-    <div class="mt-5 grid gap-3">
+    <div class="divide-y divide-border">
       <div
         v-for="(entry, index) in modelValue.entries"
         :key="`${modelValue.id}-${index}`"
-        class="grid gap-3 rounded-2xl border border-border bg-slate-900/40 p-4 xl:grid-cols-[0.18fr_0.42fr_1fr]"
+        class="flex items-center gap-3 px-5 py-3"
+        :class="entry.card ? 'bg-gold/3' : ''"
       >
-        <label class="space-y-2">
-          <span class="text-xs uppercase tracking-[0.2em] text-slate-500">Seat</span>
-          <select
-            class="w-full rounded-2xl border border-border bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none transition focus:border-accent/40"
-            :value="entry.playerIndex ?? ''"
-            @change="onPlayerChange(index, ($event.target as HTMLSelectElement).value)"
-          >
-            <option value="">None</option>
-            <option v-for="player in playerOptions" :key="player" :value="player">Player {{ player }}</option>
-          </select>
-        </label>
+        <!-- Play order indicator -->
+        <div
+          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
+          :class="index === 0 ? 'bg-gold/20 text-gold' : 'bg-border text-muted'"
+        >{{ index + 1 }}</div>
 
-        <label class="space-y-2">
-          <span class="text-xs uppercase tracking-[0.2em] text-slate-500">Card</span>
-          <select
-            class="w-full rounded-2xl border border-border bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none transition focus:border-accent/40"
-            :value="entry.card ?? ''"
-            @change="onCardChange(index, ($event.target as HTMLSelectElement).value)"
-          >
-            <option value="">None</option>
-            <option
-              v-for="card in CARD_OPTIONS"
-              :key="card.token"
-              :value="card.token"
-              :disabled="isCardDisabled(card.token, entry.card)"
-            >
-              {{ card.token }} — {{ card.label }}
-            </option>
-          </select>
-        </label>
+        <!-- Seat selector -->
+        <select
+          class="w-24 shrink-0 rounded-lg border border-border bg-deep px-2 py-2 text-xs text-text outline-none transition focus:border-gold/40"
+          :value="entry.playerIndex ?? ''"
+          @change="onPlayerChange(index, ($event.target as HTMLSelectElement).value)"
+        >
+          <option value="">—</option>
+          <option v-for="player in playerOptions" :key="player" :value="player">J{{ player }}</option>
+        </select>
 
-        <div class="space-y-2">
-          <span class="text-xs uppercase tracking-[0.2em] text-slate-500">Preview</span>
+        <!-- Card selector -->
+        <select
+          class="flex-1 rounded-lg border border-border bg-deep px-2 py-2 text-xs text-text outline-none transition focus:border-gold/40"
+          :value="entry.card ?? ''"
+          @change="onCardChange(index, ($event.target as HTMLSelectElement).value)"
+        >
+          <option value="">Aucune carte</option>
+          <option
+            v-for="card in CARD_OPTIONS"
+            :key="card.token"
+            :value="card.token"
+            :disabled="isCardDisabled(card.token, entry.card)"
+          >
+            {{ card.token }} — {{ card.label }}
+          </option>
+        </select>
+
+        <!-- Card preview -->
+        <div class="shrink-0">
           <CardTokenPill v-if="entry.card" :token="entry.card" compact />
-          <div v-else class="rounded-2xl border border-dashed border-border px-3 py-3 text-xs text-slate-500">No card assigned</div>
+          <div v-else class="h-8 w-14 rounded-lg border border-dashed border-border"></div>
         </div>
       </div>
     </div>

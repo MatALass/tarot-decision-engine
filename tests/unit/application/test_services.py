@@ -16,7 +16,7 @@ from tarot_engine.application.services import (
     evaluate_hand,
     evaluate_move,
 )
-from tarot_engine.decision.move_policies import ExpectedScoreMovePolicy
+from tarot_engine.decision.move_policies import BalancedMovePolicy, ExpectedScoreMovePolicy, RobustScoreMovePolicy
 from tarot_engine.decision.policies import BalancedPolicy, ConservativePolicy, ExpectedValuePolicy
 from tarot_engine.domain.cards import Card
 from tarot_engine.domain.deck import generate_deck
@@ -68,6 +68,7 @@ def _move_request(**overrides: object) -> MoveEvaluationRequest:
         n_samples=5,
         seed=7,
         policy="expected_score",
+        risk_weight=0.5,
     )
     defaults.update(overrides)
     return MoveEvaluationRequest(**defaults)  # type: ignore[arg-type]
@@ -95,6 +96,12 @@ class TestResolvePolicy:
 class TestResolveMovePolicy:
     def test_expected_score(self) -> None:
         assert isinstance(_resolve_move_policy("expected_score"), ExpectedScoreMovePolicy)
+
+    def test_robust_score(self) -> None:
+        assert isinstance(_resolve_move_policy("robust_score"), RobustScoreMovePolicy)
+
+    def test_balanced(self) -> None:
+        assert isinstance(_resolve_move_policy("balanced", 0.4), BalancedMovePolicy)
 
     def test_all_valid_resolve(self) -> None:
         for name in VALID_MOVE_POLICIES:

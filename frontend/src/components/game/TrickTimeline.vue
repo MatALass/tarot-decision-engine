@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import CardTokenPill from '@/components/setup/CardTokenPill.vue'
 
 export interface CompletedTrickView {
@@ -12,54 +13,106 @@ export interface CompletedTrickView {
 defineProps<{
   tricks: CompletedTrickView[]
 }>()
+
+const expanded = ref<Set<string>>(new Set())
+function toggle(id: string) {
+  if (expanded.value.has(id)) {
+    expanded.value.delete(id)
+  } else {
+    expanded.value.add(id)
+  }
+}
 </script>
 
 <template>
-  <div class="rounded-3xl border border-border bg-slate-950/40 p-6">
-    <div class="flex items-start justify-between gap-4">
+  <div class="rounded-2xl panel-base overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-4" style="border-bottom: 1px solid #1e2538;">
       <div>
-        <h3 class="text-lg font-medium text-white">Completed trick timeline</h3>
-        <p class="mt-2 text-sm text-slate-400">Read the full game flow with lead seat, winner, and every card already committed to history.</p>
+        <h3 class="font-display text-sm font-semibold tracking-wider text-gold-light">Timeline des plis</h3>
+        <p class="text-xs text-subtle mt-0.5">Historique complet de la partie en cours.</p>
       </div>
-      <div class="rounded-2xl border border-border bg-slate-900/50 px-4 py-2 text-sm text-slate-300">
-        {{ tricks.length }} trick{{ tricks.length > 1 ? 's' : '' }}
+      <div class="rounded-lg border border-border bg-deep px-3 py-1.5 text-xs font-mono text-subtle">
+        {{ tricks.length }} pli{{ tricks.length > 1 ? 's' : '' }}
       </div>
     </div>
 
-    <div v-if="tricks.length === 0" class="mt-6 rounded-2xl border border-dashed border-border px-4 py-8 text-sm text-slate-500">
-      No completed tricks yet. The timeline will populate as the setup captures earlier play.
+    <div
+      v-if="tricks.length === 0"
+      class="flex items-center justify-center gap-2 px-5 py-10 text-xs text-subtle"
+    >
+      <span class="opacity-30 text-lg">◎</span>
+      Aucun pli terminé pour l'instant.
     </div>
 
-    <div v-else class="mt-6 space-y-4">
-      <article
-        v-for="trick in tricks"
-        :key="trick.id"
-        class="rounded-3xl border border-border bg-slate-900/35 p-5"
-      >
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div class="text-xs uppercase tracking-[0.22em] text-slate-500">Trick {{ trick.trickNumber }}</div>
-            <div class="mt-2 text-base font-semibold text-white">
-              Lead: <span class="text-slate-200">{{ trick.leadSeat === null ? 'Unknown' : `Player ${trick.leadSeat}` }}</span>
+    <!-- Timeline -->
+    <div v-else class="relative px-5 py-4 space-y-0">
+      <!-- Vertical line -->
+      <div class="absolute left-[36px] top-4 bottom-4 w-px bg-border"></div>
+
+      <div v-for="trick in tricks" :key="trick.id">
+        <div
+          class="relative flex cursor-pointer items-start gap-4 rounded-xl px-3 py-3 transition-all duration-150 hover:bg-card"
+          @click="toggle(trick.id)"
+        >
+          <!-- Timeline dot -->
+          <div
+            class="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold"
+            :class="trick.winnerSeat !== null
+              ? 'border-emerald/40 bg-emerald/10 text-emerald'
+              : 'border-border bg-deep text-muted'"
+          >{{ trick.trickNumber }}</div>
+
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs font-medium text-text">Pli #{{ trick.trickNumber }}</span>
+                <span class="text-[10px] text-subtle">Entame J{{ trick.leadSeat ?? '?' }}</span>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <span
+                  v-if="trick.winnerSeat !== null"
+                  class="rounded-full border border-emerald/25 bg-emerald/8 px-2 py-0.5 text-[10px] text-emerald"
+                >J{{ trick.winnerSeat }}</span>
+                <span class="text-muted text-xs transition" :class="expanded.has(trick.id) ? 'rotate-90' : ''">›</span>
+              </div>
+            </div>
+
+            <!-- Compact card row preview (always visible) -->
+            <div class="mt-2 flex flex-wrap gap-1">
+              <CardTokenPill
+                v-for="(entry, i) in trick.cards"
+                :key="`${trick.id}-${i}`"
+                :token="entry.card"
+                compact
+              />
             </div>
           </div>
-          <div class="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">
-            Winner: {{ trick.winnerSeat === null ? 'Unknown' : `Player ${trick.winnerSeat}` }}
-          </div>
         </div>
 
-        <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <div
-            v-for="(entry, index) in trick.cards"
-            :key="`${trick.id}-${index}`"
-            class="rounded-2xl border border-border bg-slate-950/45 p-3"
-          >
-            <div class="text-xs uppercase tracking-[0.2em] text-slate-500">Play #{{ index + 1 }}</div>
-            <div class="mt-2 text-sm text-slate-300">Player {{ entry.seat }}</div>
-            <div class="mt-3"><CardTokenPill :token="entry.card" compact /></div>
+        <!-- Expanded detail -->
+        <div
+          v-if="expanded.has(trick.id)"
+          class="ml-10 mb-2 rounded-xl border border-border bg-deep overflow-hidden"
+        >
+          <div class="divide-y divide-border">
+            <div
+              v-for="(entry, i) in trick.cards"
+              :key="`exp-${trick.id}-${i}`"
+              class="flex items-center gap-3 px-4 py-2.5"
+            >
+              <div class="w-5 text-[10px] text-muted font-mono">#{{ i + 1 }}</div>
+              <div class="text-xs text-subtle w-12">J{{ entry.seat }}</div>
+              <CardTokenPill :token="entry.card" compact />
+              <div class="ml-auto">
+                <span
+                  v-if="i === 0"
+                  class="text-[10px] text-sapphire border border-sapphire/20 rounded px-1.5 py-0.5"
+                >Entame</span>
+              </div>
+            </div>
           </div>
         </div>
-      </article>
+      </div>
     </div>
   </div>
 </template>

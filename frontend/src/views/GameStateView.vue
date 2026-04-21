@@ -27,19 +27,19 @@ const {
 
 function normalizeEntries(entries: Array<{ playerIndex: number | null; card: string | null }>) {
   return entries.filter(
-    (entry): entry is { playerIndex: number; card: string } => entry.playerIndex !== null && entry.card !== null,
+    (entry): entry is { playerIndex: number; card: string } =>
+      entry.playerIndex !== null && entry.card !== null,
   )
 }
 
-const currentTrickRows = computed<TrickRow[]>(() => {
-  const normalized = normalizeEntries(currentTrick.value.entries)
-  return normalized.map((entry, index) => ({
+const currentTrickRows = computed<TrickRow[]>(() =>
+  normalizeEntries(currentTrick.value.entries).map((entry, index) => ({
     seat: entry.playerIndex,
     card: entry.card,
     lead: index === 0,
     winner: false,
-  }))
-})
+  })),
+)
 
 const completedTrickViews = computed<CompletedTrickView[]>(() =>
   completedTricks.value.map((trick, trickIndex) => {
@@ -55,158 +55,209 @@ const completedTrickViews = computed<CompletedTrickView[]>(() =>
 )
 
 const playedCardCount = computed(
-  () => currentTrickRows.value.length + completedTrickViews.value.reduce((total, trick) => total + trick.cards.length, 0),
+  () =>
+    currentTrickRows.value.length +
+    completedTrickViews.value.reduce((total, trick) => total + trick.cards.length, 0),
 )
 
 const observedPlayedCount = computed(() => {
-  const currentCount = currentTrickRows.value.filter((row) => row.seat === playerIndex.value).length
-  const historyCount = completedTrickViews.value.reduce(
+  const inCurrent = currentTrickRows.value.filter((row) => row.seat === playerIndex.value).length
+  const inHistory = completedTrickViews.value.reduce(
     (total, trick) => total + trick.cards.filter((card) => card.seat === playerIndex.value).length,
     0,
   )
-  return currentCount + historyCount
-})
-
-const seatCards = computed(() => {
-  const cardsBySeat = new Map<number, string[]>()
-  for (let seat = 0; seat < 5; seat += 1) {
-    cardsBySeat.set(seat, [])
-  }
-  cardsBySeat.set(playerIndex.value, [...remainingHand.value])
-  return cardsBySeat
+  return inCurrent + inHistory
 })
 
 const seatSummaries = computed(() =>
   Array.from({ length: 5 }, (_, seat) => {
-    const roleParts: string[] = []
-    if (seat === playerIndex.value) roleParts.push('Observed hand')
-    if (seat === takerIndex.value) roleParts.push('Taker')
-    if (partnerIndex.value !== null && seat === partnerIndex.value) roleParts.push('Partner')
-    if (roleParts.length === 0) roleParts.push('Opponent seat')
+    const roles: string[] = []
+    if (seat === playerIndex.value) roles.push('Main observée')
+    if (seat === takerIndex.value) roles.push('Preneur')
+    if (partnerIndex.value !== null && seat === partnerIndex.value) roles.push('Partenaire')
+    if (roles.length === 0) roles.push('Adversaire')
 
-    let status = 'Hidden remaining hand.'
-    if (seat === playerIndex.value) {
-      status = `${remainingHand.value.length} cards known in hand, ${observedPlayedCount.value} already committed.`
-    } else if (seat === nextPlayerIndex.value) {
-      status = 'Next actor in turn order.'
-    }
+    let status = 'Main inconnue.'
+    if (seat === playerIndex.value)
+      status = `${remainingHand.value.length} cartes connues, ${observedPlayedCount.value} jouées.`
+    else if (seat === nextPlayerIndex.value)
+      status = 'Prochain à jouer.'
 
     return {
       seat,
-      role: roleParts.join(' • '),
+      role: roles.join(' · '),
       status,
       highlighted: seat === playerIndex.value || seat === nextPlayerIndex.value,
-      cards: seatCards.value.get(seat) ?? [],
-      meta: seat === nextPlayerIndex.value ? 'Next to play' : '',
+      cards: seat === playerIndex.value ? remainingHand.value : [],
+      meta: seat === nextPlayerIndex.value ? 'À jouer' : '',
     }
   }),
 )
 
 const recommendationSummary = computed(() => {
-  if (!lastRecommendation.value) {
-    return null
-  }
+  if (!lastRecommendation.value) return null
   const best = lastRecommendation.value.evaluations.find(
     (item) => item.action.card === lastRecommendation.value?.recommended_action.card,
   )
   return {
-    action: lastRecommendation.value.recommended_action.card,
+    card: lastRecommendation.value.recommended_action.card,
     rationale: lastRecommendation.value.rationale,
     expectedScore: best?.expected_score ?? null,
     winRate: best?.win_rate ?? null,
   }
 })
+
+const isEmpty = computed(
+  () =>
+    remainingHand.value.length === 0 &&
+    completedTricks.value.length === 0 &&
+    currentTrickRows.value.length === 0,
+)
 </script>
 
 <template>
-  <section>
+  <section class="animate-fade-in">
     <SectionHeader
-      eyebrow="Observable state"
-      title="Current state cockpit"
-      description="Move seamlessly from setup into a premium operational view of the observable state: current trick, completed-trick timeline, seat roles, and the latest recommendation context."
+      eyebrow="État de partie"
+      title="Cockpit observable"
+      description="Vue synchronisée de l'état courant : pli en jeu, historique, rôles des sièges et dernière recommandation."
     />
 
-    <div v-if="remainingHand.length === 0 && completedTricks.length === 0 && currentTrickRows.length === 0" class="rounded-3xl border border-dashed border-border bg-slate-950/20 px-6 py-10 text-sm text-slate-400">
-      No synchronized game state yet. Configure a game on the Setup page first, then come back here to inspect the observable state.
+    <!-- Empty state -->
+    <div
+      v-if="isEmpty"
+      class="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border py-20 text-center"
+    >
+      <span class="text-4xl opacity-20 font-display">◈</span>
+      <div class="text-sm text-subtle">Aucun état synchronisé.</div>
+      <RouterLink
+        to="/setup"
+        class="btn-gold rounded-xl px-6 py-2.5 text-sm"
+      >Configurer une partie →</RouterLink>
     </div>
 
-    <div v-else class="space-y-6">
-      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StateMetricCard label="Observed hand" :value="`${remainingHand.length} cards`" hint="Cards still known in the observed player's hand." />
-        <StateMetricCard label="Cards already played" :value="`${playedCardCount}`" hint="Across current trick and trick history." />
-        <StateMetricCard label="Contract" :value="contract" :hint="`Taker: Player ${takerIndex}${partnerIndex !== null ? ` • Partner: Player ${partnerIndex}` : ''}`" />
-        <StateMetricCard label="Turn focus" :value="`Player ${nextPlayerIndex}`" :hint="'Next to act according to the synchronized setup state.'" />
+    <div v-else class="space-y-5">
+      <!-- Metric strip -->
+      <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StateMetricCard
+          label="Main observée"
+          :value="`${remainingHand.length} cartes`"
+          :hint="`Joueur ${playerIndex} · ${observedPlayedCount} déjà jouées`"
+        />
+        <StateMetricCard
+          label="Cartes jouées"
+          :value="`${playedCardCount}`"
+          hint="Pli courant + historique"
+        />
+        <StateMetricCard
+          label="Contrat"
+          :value="contract"
+          :hint="`Preneur: J${takerIndex}${partnerIndex !== null ? ` · Partenaire: J${partnerIndex}` : ''}`"
+        />
+        <StateMetricCard
+          label="Prochain joueur"
+          :value="`Joueur ${nextPlayerIndex}`"
+          hint="Prochain à jouer dans l'état synchronisé"
+        />
       </div>
 
-      <div class="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <!-- Current trick + Decision panel -->
+      <div class="grid gap-5 xl:grid-cols-[1fr_1fr]">
         <TrickTable
-          title="Current trick"
-          subtitle="Read the partial trick exactly as captured from setup. Lead order is preserved and the next actor stays visible in the surrounding context panels."
+          title="Pli courant"
+          subtitle="Cartes déjà jouées dans ce pli, dans l'ordre d'entame."
           :rows="currentTrickRows"
-          empty-message="No card has been played yet in the current trick."
+          empty-message="Aucune carte jouée dans le pli courant."
         />
 
-        <div class="rounded-3xl border border-border bg-slate-950/40 p-6">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <h3 class="text-lg font-medium text-white">Decision continuity</h3>
-              <p class="mt-2 text-sm text-slate-400">The setup state, current-state cockpit, and recommendation page now share the same synchronized source of truth.</p>
-            </div>
-            <div class="rounded-2xl border border-border bg-slate-900/50 px-4 py-2 text-sm text-slate-300">
-              {{ isSubmitting ? 'Evaluating…' : 'Synced' }}
+        <!-- Decision continuity panel -->
+        <div class="rounded-2xl panel-base overflow-hidden">
+          <div class="flex items-center justify-between px-5 py-4" style="border-bottom: 1px solid #1e2538;">
+            <h3 class="font-display text-sm font-semibold tracking-wider text-gold-light">Décision</h3>
+            <div
+              class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-medium"
+              :class="isSubmitting
+                ? 'border-amber/25 bg-amber/8 text-amber'
+                : 'border-emerald/25 bg-emerald/8 text-emerald'"
+            >
+              <div
+                class="h-1.5 w-1.5 rounded-full"
+                :class="isSubmitting ? 'bg-amber animate-pulse' : 'bg-emerald'"
+              ></div>
+              {{ isSubmitting ? 'Évaluation…' : 'Synchronisé' }}
             </div>
           </div>
 
-          <div class="mt-6 space-y-4">
-            <div class="rounded-2xl border border-border bg-slate-900/40 p-4">
-              <div class="text-xs uppercase tracking-[0.22em] text-slate-500">Observed hand rail</div>
-              <div v-if="remainingHand.length === 0" class="mt-3 text-sm text-slate-500">No known card remaining.</div>
-              <div v-else class="mt-4 grid gap-3 sm:grid-cols-2">
-                <CardTokenPill v-for="card in remainingHand" :key="card" :token="card" compact />
+          <div class="px-5 py-4 space-y-4">
+            <!-- Hand rail -->
+            <div class="rounded-xl border border-border bg-deep p-3">
+              <div class="text-[10px] tracking-[0.25em] text-subtle uppercase mb-2">Main connue</div>
+              <div v-if="remainingHand.length === 0" class="text-xs text-muted italic">Aucune carte.</div>
+              <div v-else class="flex flex-wrap gap-1.5">
+                <CardTokenPill
+                  v-for="card in remainingHand"
+                  :key="card"
+                  :token="card"
+                  compact
+                />
               </div>
             </div>
 
-            <div class="rounded-2xl border border-border bg-slate-900/40 p-4">
-              <div class="text-xs uppercase tracking-[0.22em] text-slate-500">Recommendation status</div>
-              <div v-if="recommendationSummary" class="mt-3 space-y-3 text-sm text-slate-300">
-                <div class="flex items-center gap-3">
-                  <CardTokenPill :token="recommendationSummary.action" compact />
-                  <span>{{ recommendationSummary.rationale }}</span>
+            <!-- Recommendation status -->
+            <div
+              class="rounded-xl border p-3"
+              :class="recommendationSummary
+                ? 'border-gold/25 bg-gold/5'
+                : 'border-border bg-deep'"
+            >
+              <div class="text-[10px] tracking-[0.25em] text-subtle uppercase mb-2">Recommandation</div>
+              <div v-if="recommendationSummary" class="space-y-2">
+                <div class="flex items-center gap-2.5">
+                  <CardTokenPill :token="recommendationSummary.card" compact :active="true" />
+                  <span class="text-xs text-subtle flex-1">{{ recommendationSummary.rationale }}</span>
                 </div>
-                <div class="grid gap-3 sm:grid-cols-2">
-                  <div class="rounded-2xl border border-border bg-slate-950/45 px-3 py-3">
-                    <div class="text-xs uppercase tracking-[0.18em] text-slate-500">Expected score</div>
-                    <div class="mt-2 text-lg font-semibold text-white">{{ recommendationSummary.expectedScore === null ? '—' : recommendationSummary.expectedScore.toFixed(2) }}</div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="rounded-lg border border-border bg-deep px-3 py-2">
+                    <div class="text-[10px] text-subtle">EV</div>
+                    <div class="font-mono text-sm font-semibold metric-gold">
+                      {{ recommendationSummary.expectedScore !== null
+                        ? (recommendationSummary.expectedScore > 0 ? '+' : '') + recommendationSummary.expectedScore.toFixed(2)
+                        : '—' }}
+                    </div>
                   </div>
-                  <div class="rounded-2xl border border-border bg-slate-950/45 px-3 py-3">
-                    <div class="text-xs uppercase tracking-[0.18em] text-slate-500">Win rate</div>
-                    <div class="mt-2 text-lg font-semibold text-white">{{ recommendationSummary.winRate === null ? '—' : `${(recommendationSummary.winRate * 100).toFixed(1)}%` }}</div>
+                  <div class="rounded-lg border border-border bg-deep px-3 py-2">
+                    <div class="text-[10px] text-subtle">Win rate</div>
+                    <div class="font-mono text-sm font-semibold text-emerald">
+                      {{ recommendationSummary.winRate !== null
+                        ? `${(recommendationSummary.winRate * 100).toFixed(1)}%`
+                        : '—' }}
+                    </div>
                   </div>
                 </div>
               </div>
-              <div v-else class="mt-3 text-sm text-slate-500">No recommendation captured yet. Submit the setup to populate the recommendation cockpit.</div>
+              <div v-else class="text-xs text-muted italic">
+                Soumettez d'abord la configuration pour obtenir une recommandation.
+              </div>
             </div>
 
-            <div class="grid gap-3 sm:grid-cols-2">
+            <!-- Nav buttons -->
+            <div class="grid grid-cols-2 gap-2">
               <RouterLink
                 to="/setup"
-                class="rounded-2xl border border-border px-4 py-3 text-center text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:bg-slate-900/50"
-              >
-                Edit setup
-              </RouterLink>
+                class="rounded-xl border border-border py-2.5 text-center text-xs font-medium text-subtle transition hover:border-rim hover:text-text"
+              >← Modifier</RouterLink>
               <RouterLink
                 to="/recommendation"
-                class="rounded-2xl bg-accent px-4 py-3 text-center text-sm font-semibold text-slate-950 transition hover:bg-accent-light"
-              >
-                Open recommendation view
-              </RouterLink>
+                class="btn-gold rounded-xl py-2.5 text-center text-xs"
+              >Analyse →</RouterLink>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+      <!-- Seats + Timeline -->
+      <div class="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        <div class="grid grid-cols-2 gap-3 content-start">
           <SeatStatusCard
             v-for="seat in seatSummaries"
             :key="seat.seat"
@@ -218,7 +269,6 @@ const recommendationSummary = computed(() => {
             :meta="seat.meta"
           />
         </div>
-
         <TrickTimeline :tricks="completedTrickViews" />
       </div>
     </div>

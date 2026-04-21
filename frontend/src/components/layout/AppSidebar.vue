@@ -1,28 +1,82 @@
 <script setup lang="ts">
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
+
 const links = [
-  { name: 'Setup', to: '/setup', description: 'Configure game context' },
-  { name: 'Current state', to: '/game', description: 'Track tricks and observable state' },
-  { name: 'Recommendation', to: '/recommendation', description: 'Compare legal actions' },
-  { name: 'Analysis', to: '/analysis', description: 'Research and probability views' },
+  {
+    name: 'Configuration',
+    to: '/setup',
+    icon: '⬡',
+    description: 'Saisie de l\'état initial',
+  },
+  {
+    name: 'État de partie',
+    to: '/game',
+    icon: '◈',
+    description: 'Plis et joueurs actifs',
+  },
+  {
+    name: 'Recommandation',
+    to: '/recommendation',
+    icon: '◆',
+    description: 'Actions classées par EV',
+  },
+  {
+    name: 'Analyse',
+    to: '/analysis',
+    icon: '◉',
+    description: 'Métriques avancées',
+  },
 ]
 </script>
 
 <template>
-  <aside class="hidden w-80 shrink-0 xl:block">
-    <div class="rounded-3xl border border-border bg-panel/80 p-4 shadow-soft">
-      <p class="px-3 pb-3 text-xs uppercase tracking-[0.3em] text-slate-500">Navigation</p>
-      <nav class="space-y-2">
+  <aside class="hidden w-72 shrink-0 xl:block">
+    <div class="rounded-2xl panel-base p-3">
+      <div class="px-3 py-2 mb-1">
+        <span class="text-xs tracking-[0.25em] text-subtle uppercase font-medium">Navigation</span>
+      </div>
+      <nav class="space-y-1">
         <RouterLink
           v-for="link in links"
           :key="link.to"
           :to="link.to"
-          class="block rounded-2xl border border-transparent px-4 py-3 transition hover:border-border hover:bg-slate-900/40"
-          active-class="border-accent/30 bg-accent/10"
+          class="group flex items-center gap-3 rounded-xl px-3 py-3 transition-all duration-200"
+          :class="route.path === link.to
+            ? 'bg-gold/10 border border-gold/25 shadow-glow-gold'
+            : 'border border-transparent hover:bg-card hover:border-border'"
         >
-          <div class="text-sm font-medium text-white">{{ link.name }}</div>
-          <div class="mt-1 text-sm text-slate-400">{{ link.description }}</div>
+          <div
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm transition-all duration-200"
+            :class="route.path === link.to
+              ? 'bg-gold/20 text-gold'
+              : 'bg-card text-subtle group-hover:text-gold group-hover:bg-gold/10'"
+          >
+            {{ link.icon }}
+          </div>
+          <div class="min-w-0">
+            <div
+              class="text-sm font-medium transition-colors"
+              :class="route.path === link.to ? 'text-gold' : 'text-text group-hover:text-gold-light'"
+            >
+              {{ link.name }}
+            </div>
+            <div class="text-xs text-subtle mt-0.5 truncate">{{ link.description }}</div>
+          </div>
+          <div
+            v-if="route.path === link.to"
+            class="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-gold"
+            style="box-shadow: 0 0 6px rgba(201,150,58,0.6);"
+          ></div>
         </RouterLink>
       </nav>
+
+      <!-- Footer info -->
+      <div class="mt-4 rounded-xl border border-border bg-deep p-3">
+        <div class="text-xs text-subtle mb-1 tracking-wider uppercase">Monte Carlo</div>
+        <div class="text-xs text-text font-mono">Policy: expected_score</div>
+      </div>
     </div>
   </aside>
 </template>

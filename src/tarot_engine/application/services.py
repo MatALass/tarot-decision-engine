@@ -10,7 +10,12 @@ from tarot_engine.application.dto import (
 )
 from tarot_engine.decision.evaluator import evaluate_contracts
 from tarot_engine.decision.move_explainer import explain_move
-from tarot_engine.decision.move_policies import ExpectedScoreMovePolicy, MoveDecisionPolicy
+from tarot_engine.decision.move_policies import (
+    BalancedMovePolicy,
+    ExpectedScoreMovePolicy,
+    MoveDecisionPolicy,
+    RobustScoreMovePolicy,
+)
 from tarot_engine.decision.policies import (
     BalancedPolicy,
     ConservativePolicy,
@@ -27,7 +32,7 @@ from tarot_engine.simulation.monte_carlo import SimulationConfig
 from tarot_engine.utils.parsing import parse_hand_string, parse_trick_string
 
 VALID_POLICIES: tuple[str, ...] = ("conservative", "expected_value", "balanced")
-VALID_MOVE_POLICIES: tuple[str, ...] = ("expected_score",)
+VALID_MOVE_POLICIES: tuple[str, ...] = ("expected_score", "robust_score", "balanced")
 
 
 def evaluate_hand(request: EvaluationRequest) -> EvaluationResponse:
@@ -57,7 +62,7 @@ def evaluate_move(request: MoveEvaluationRequest) -> MoveEvaluationResponse:
     game_state = _build_game_state_from_request(request)
     config = EvaluatorConfig(n_samples=request.n_samples, seed=request.seed)
     evaluations = evaluate_actions(game_state, config=config)
-    policy = _resolve_move_policy(request.policy)
+    policy = _resolve_move_policy(request.policy, request.risk_weight)
     recommendation = policy.choose(evaluations)
     return MoveEvaluationResponse(
         recommendation=recommendation,
@@ -133,9 +138,13 @@ def _resolve_policy(name: str, risk_weight: float) -> DecisionPolicy:
 
 
 
-def _resolve_move_policy(name: str) -> MoveDecisionPolicy:
+def _resolve_move_policy(name: str, risk_weight: float = 0.5) -> MoveDecisionPolicy:
     if name == "expected_score":
         return ExpectedScoreMovePolicy()
+    if name == "robust_score":
+        return RobustScoreMovePolicy()
+    if name == "balanced":
+        return BalancedMovePolicy(risk_weight=risk_weight)
     raise ValueError(
         f"Unknown move policy '{name}'. Valid options: {', '.join(VALID_MOVE_POLICIES)}."
     )
