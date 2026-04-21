@@ -1,13 +1,4 @@
-"""CLI entry point for the Tarot Decision Engine.
-
-Usage examples
---------------
-  tarot-engine evaluate-hand --hand "T21,T20,T18,EXCUSE,T1,KH,QH,VH,10H,AS,KS,QS,VS,10S,9S"
-  tarot-engine evaluate-hand --hand "..." --contracts PRISE --contracts GARDE
-  tarot-engine evaluate-hand --hand "..." --policy expected_value --n-simulations 2000 --seed 42
-  tarot-engine evaluate-hand --hand "..." --policy balanced --risk-weight 1.0
-  tarot-engine evaluate-hand --hand "..." --output json --seed 42
-"""
+"""CLI entry point for the Tarot Decision Engine."""
 
 from __future__ import annotations
 
@@ -21,23 +12,25 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from tarot_engine.application.dto import EvaluationRequest, EvaluationResponse
-from tarot_engine.application.services import evaluate_hand
+from tarot_engine.application.dto import (
+    EvaluationRequest,
+    EvaluationResponse,
+    MoveEvaluationRequest,
+    MoveEvaluationResponse,
+)
+from tarot_engine.application.services import evaluate_hand, evaluate_move
 from tarot_engine.domain.enums import Contract
+from tarot_engine.utils.parsing import format_card_token
 
-# ---------------------------------------------------------------------------
-# App structure: one root Typer + one sub-Typer per command group.
-# This pattern guarantees real subcommand dispatch in the shell regardless
-# of how many commands are registered, and is compatible with Typer ≥ 0.9.
-# ---------------------------------------------------------------------------
-
-# Sub-app for the evaluate-hand command group.
 _evaluate_app = typer.Typer(
     help="Evaluate a player hand using Monte Carlo simulation.",
     add_completion=False,
 )
+_move_app = typer.Typer(
+    help="Recommend a move from an intermediate observable game state.",
+    add_completion=False,
+)
 
-# Root app — dispatches to sub-apps.
 app = typer.Typer(
     name="tarot-engine",
     help="Monte Carlo decision engine for 5-player French Tarot.",
@@ -45,6 +38,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(_evaluate_app, name="evaluate-hand")
+app.add_typer(_move_app, name="recommend-move")
 
 console = Console()
 err_console = Console(stderr=True)
@@ -56,14 +50,14 @@ class OutputFormat(str, Enum):
 
 
 class PolicyName(str, Enum):
-    conservative   = "conservative"
+    conservative = "conservative"
     expected_value = "expected_value"
-    balanced       = "balanced"
+    balanced = "balanced"
 
 
-# ---------------------------------------------------------------------------
-# evaluate-hand command
-# ---------------------------------------------------------------------------
+class MovePolicyName(str, Enum):
+    expected_score = "expected_score"
+
 
 @_evaluate_app.callback(invoke_without_command=True)
 def evaluate_hand_cmd(
@@ -118,9 +112,66 @@ def evaluate_hand_cmd(
         raise typer.Exit(code=1)
 
     if output == OutputFormat.json:
-        _render_json(response)
+        _render_contract_json(response)
     else:
-        _render_text(response)
+        _render_contract_text(response)
+
+
+@_move_app.callback(invoke_without_command=True)
+def recommend_move_cmd(
+    remaining_hand: Annotated[str, typer.Option(
+        "--remaining-hand",
+        help="Comma-separated remaining hand of the observed player.",
+    )],
+    contract: Annotated[str, typer.Option(
+        "--contract",
+        help="Current contract.",
+    )],
+    player_index: Annotated[int, typer.Option("--player-index", min=0, max=4)] = 0,
+    taker_index: Annotated[int, typer.Option("--taker-index", min=0, max=4)] = 0,
+    partner_index: Annotated[int | None, typer.Option("--partner-index", min=0, max=4)] = None,
+    completed_trick: Annotated[Optional[list[str]], typer.Option(
+        "--completed-trick",
+        help="Completed trick in play order, format '0:T21|1:T20|2:KH|3:QH|4:EXCUSE'. Repeat for multiple tricks.",
+    )] = None,
+    current_trick: Annotated[str, typer.Option(
+        "--current-trick",
+        help="Current trick in play order, format '1:KH|2:QH'.",
+    )] = "",
+    next_player_index: Annotated[int, typer.Option("--next-player-index", min=0, max=4)] = 0,
+    n_samples: Annotated[int, typer.Option("--n-samples", min=1, max=100_000)] = 200,
+    seed: Annotated[int, typer.Option("--seed")] = 0,
+    policy: Annotated[MovePolicyName, typer.Option(
+        "--policy", case_sensitive=False, help="Move recommendation policy."
+    )] = MovePolicyName.expected_score,
+    output: Annotated[OutputFormat, typer.Option(
+        "--output", "-o", help="Output format: text | json.", case_sensitive=False
+    )] = OutputFormat.text,
+) -> None:
+    """Recommend a move from an intermediate observable state."""
+    try:
+        request = MoveEvaluationRequest(
+            remaining_hand_str=remaining_hand,
+            contract=_parse_contract(contract),
+            player_index=player_index,
+            taker_index=taker_index,
+            partner_index=partner_index,
+            completed_trick_strs=tuple(completed_trick or []),
+            current_trick_str=current_trick,
+            next_player_index=next_player_index,
+            n_samples=n_samples,
+            seed=seed,
+            policy=policy.value,
+        )
+        response = evaluate_move(request)
+    except ValueError as exc:
+        err_console.print(f"[bold red]Error:[/bold red] {exc}")
+        raise typer.Exit(code=1)
+
+    if output == OutputFormat.json:
+        _render_move_json(response)
+    else:
+        _render_move_text(response)
 
 
 def _parse_contracts(raw: Optional[list[str]]) -> list[Contract]:
@@ -150,7 +201,17 @@ def _parse_contracts(raw: Optional[list[str]]) -> list[Contract]:
     return deduped
 
 
-def _render_text(response: EvaluationResponse) -> None:
+def _parse_contract(raw: str) -> Contract:
+    valid = {c.value: c for c in Contract}
+    upper = raw.strip().upper()
+    if upper not in valid:
+        raise ValueError(
+            f"Unknown contract '{raw}'. Valid options: {', '.join(valid)}."
+        )
+    return valid[upper]
+
+
+def _render_contract_text(response: EvaluationResponse) -> None:
     rec = response.recommendation
     console.print()
     console.print(Panel(
@@ -168,15 +229,15 @@ def _render_text(response: EvaluationResponse) -> None:
     console.print()
     table = Table(title="Contract Evaluations", box=box.ROUNDED,
                   show_header=True, header_style="bold cyan")
-    table.add_column("Rank",        justify="center", width=6)
-    table.add_column("Contract",    justify="left",   width=14)
-    table.add_column("Win rate",    justify="right",  width=10)
-    table.add_column("Exp. score",  justify="right",  width=12)
-    table.add_column("Std",         justify="right",  width=8)
-    table.add_column("Q10",         justify="right",  width=8)
-    table.add_column("Median",      justify="right",  width=8)
-    table.add_column("Q90",         justify="right",  width=8)
-    table.add_column("Simulations", justify="right",  width=12)
+    table.add_column("Rank", justify="center", width=6)
+    table.add_column("Contract", justify="left", width=14)
+    table.add_column("Win rate", justify="right", width=10)
+    table.add_column("Exp. score", justify="right", width=12)
+    table.add_column("Std", justify="right", width=8)
+    table.add_column("Q10", justify="right", width=8)
+    table.add_column("Median", justify="right", width=8)
+    table.add_column("Q90", justify="right", width=8)
+    table.add_column("Simulations", justify="right", width=12)
     for rc in rec.ranked_contracts:
         ev = rc.evaluation
         table.add_row(
@@ -191,7 +252,7 @@ def _render_text(response: EvaluationResponse) -> None:
     console.print()
 
 
-def _render_json(response: EvaluationResponse) -> None:
+def _render_contract_json(response: EvaluationResponse) -> None:
     rec = response.recommendation
     payload = {
         "recommended_contract": rec.recommended_contract.value,
@@ -213,6 +274,73 @@ def _render_json(response: EvaluationResponse) -> None:
                 "n_simulations": rc.evaluation.n_simulations,
             }
             for rc in rec.ranked_contracts
+        ],
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def _render_move_text(response: MoveEvaluationResponse) -> None:
+    rec = response.recommendation
+    console.print()
+    console.print(Panel(
+        f"[bold green]Recommended card: {rec.recommended_action.card}[/bold green]\n"
+        f"Played by player: [cyan]{rec.recommended_action.player_index}[/cyan]\n"
+        f"Policy: [cyan]{rec.policy_name}[/cyan]",
+        title="[bold]Tarot Move Recommendation[/bold]",
+        border_style="green",
+    ))
+    console.print()
+    console.print(f"[bold]Rationale:[/bold] {rec.rationale}")
+    console.print()
+    table = Table(title="Move Evaluations", box=box.ROUNDED,
+                  show_header=True, header_style="bold cyan")
+    table.add_column("Rank", justify="center", width=6)
+    table.add_column("Card", justify="left", width=10)
+    table.add_column("Win rate", justify="right", width=10)
+    table.add_column("Exp. score", justify="right", width=12)
+    table.add_column("Std", justify="right", width=8)
+    table.add_column("Q10", justify="right", width=8)
+    table.add_column("Median", justify="right", width=8)
+    table.add_column("Q90", justify="right", width=8)
+    table.add_column("Samples", justify="right", width=10)
+    for ranked in rec.ranked_actions:
+        ev = ranked.evaluation
+        table.add_row(
+            str(ranked.rank), str(ev.action.card), f"{ev.win_rate:.1%}",
+            f"{ev.expected_score:+.0f}", f"{ev.score_std:.0f}",
+            f"{ev.score_q10:+.0f}", f"{ev.score_q50:+.0f}",
+            f"{ev.score_q90:+.0f}", str(ev.n_samples),
+            style="bold green" if ranked.rank == 1 else "",
+        )
+    console.print(table)
+    console.print()
+
+
+def _render_move_json(response: MoveEvaluationResponse) -> None:
+    rec = response.recommendation
+    payload = {
+        "recommended_action": {
+            "player_index": rec.recommended_action.player_index,
+            "card": format_card_token(rec.recommended_action.card),
+        },
+        "policy_name": rec.policy_name,
+        "rationale": rec.rationale,
+        "actions": [
+            {
+                "rank": ranked.rank,
+                "player_index": ranked.evaluation.action.player_index,
+                "card": format_card_token(ranked.evaluation.action.card),
+                "win_rate": round(ranked.evaluation.win_rate, 4),
+                "expected_score": round(ranked.evaluation.expected_score, 2),
+                "score_std": round(ranked.evaluation.score_std, 2),
+                "score_min": ranked.evaluation.score_min,
+                "score_max": ranked.evaluation.score_max,
+                "score_q10": round(ranked.evaluation.score_q10, 2),
+                "score_q50": round(ranked.evaluation.score_q50, 2),
+                "score_q90": round(ranked.evaluation.score_q90, 2),
+                "n_samples": ranked.evaluation.n_samples,
+            }
+            for ranked in rec.ranked_actions
         ],
     }
     print(json.dumps(payload, indent=2, ensure_ascii=False))

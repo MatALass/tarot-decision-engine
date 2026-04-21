@@ -2,12 +2,26 @@
 
 import pytest
 
-from tarot_engine.application.dto import EvaluationRequest, EvaluationResponse
-from tarot_engine.application.services import VALID_POLICIES, _resolve_policy, evaluate_hand
+from tarot_engine.application.dto import (
+    EvaluationRequest,
+    EvaluationResponse,
+    MoveEvaluationRequest,
+    MoveEvaluationResponse,
+)
+from tarot_engine.application.services import (
+    VALID_MOVE_POLICIES,
+    VALID_POLICIES,
+    _resolve_move_policy,
+    _resolve_policy,
+    evaluate_hand,
+    evaluate_move,
+)
+from tarot_engine.decision.move_policies import ExpectedScoreMovePolicy
 from tarot_engine.decision.policies import BalancedPolicy, ConservativePolicy, ExpectedValuePolicy
 from tarot_engine.domain.cards import Card
 from tarot_engine.domain.deck import generate_deck
 from tarot_engine.domain.enums import Contract
+from tarot_engine.utils.parsing import format_card_token
 
 
 def _hand_str() -> str:
@@ -24,6 +38,39 @@ def _request(**overrides: object) -> EvaluationRequest:
     )
     defaults.update(overrides)
     return EvaluationRequest(**defaults)  # type: ignore[arg-type]
+
+
+def _build_move_fixture() -> tuple[str, tuple[str, ...], str]:
+    deck = generate_deck()
+    remaining = (deck[13], deck[14])
+    other_cards = iter(deck[15:])
+    completed: list[str] = []
+    for trick_index in range(13):
+        entries = [f"0:{format_card_token(deck[trick_index])}"]
+        for player_index in range(1, 5):
+            entries.append(f"{player_index}:{format_card_token(next(other_cards))}")
+        completed.append("|".join(entries))
+    current_trick = f"4:{format_card_token(next(other_cards))}"
+    return ",".join(format_card_token(card) for card in remaining), tuple(completed), current_trick
+
+
+def _move_request(**overrides: object) -> MoveEvaluationRequest:
+    remaining_hand_str, completed_trick_strs, current_trick_str = _build_move_fixture()
+    defaults: dict[str, object] = dict(
+        remaining_hand_str=remaining_hand_str,
+        contract=Contract.GARDE,
+        player_index=0,
+        taker_index=0,
+        partner_index=None,
+        completed_trick_strs=completed_trick_strs,
+        current_trick_str=current_trick_str,
+        next_player_index=0,
+        n_samples=5,
+        seed=7,
+        policy="expected_score",
+    )
+    defaults.update(overrides)
+    return MoveEvaluationRequest(**defaults)  # type: ignore[arg-type]
 
 
 class TestResolvePolicy:
@@ -43,6 +90,19 @@ class TestResolvePolicy:
     def test_all_valid_resolve(self) -> None:
         for name in VALID_POLICIES:
             _resolve_policy(name, 0.5)
+
+
+class TestResolveMovePolicy:
+    def test_expected_score(self) -> None:
+        assert isinstance(_resolve_move_policy("expected_score"), ExpectedScoreMovePolicy)
+
+    def test_all_valid_resolve(self) -> None:
+        for name in VALID_MOVE_POLICIES:
+            _resolve_move_policy(name)
+
+    def test_unknown_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown move policy"):
+            _resolve_move_policy("magic")
 
 
 class TestEvaluationRequestValidation:
@@ -68,6 +128,19 @@ class TestEvaluationRequestValidation:
     def test_immutable(self) -> None:
         with pytest.raises(Exception):
             _request().seed = 999  # type: ignore[misc]
+
+
+class TestMoveEvaluationRequestValidation:
+    def test_valid(self) -> None:
+        assert _move_request().policy == "expected_score"
+
+    def test_invalid_move_policy_raises(self) -> None:
+        with pytest.raises(Exception):
+            _move_request(policy="magic")
+
+    def test_empty_remaining_hand_raises(self) -> None:
+        with pytest.raises(Exception):
+            _move_request(remaining_hand_str="")
 
 
 class TestEvaluateHandService:
@@ -107,3 +180,23 @@ class TestEvaluateHandService:
         assert [ev.contract for ev in response.evaluations] == [
             rc.evaluation.contract for rc in response.recommendation.ranked_contracts
         ]
+
+
+class TestEvaluateMoveService:
+    def test_returns_response(self) -> None:
+        assert isinstance(evaluate_move(_move_request()), MoveEvaluationResponse)
+
+    def test_recommended_action_player_matches_observed(self) -> None:
+        response = evaluate_move(_move_request())
+        assert response.recommendation.recommended_action.player_index == 0
+
+    def test_reproducible(self) -> None:
+        r1 = evaluate_move(_move_request(seed=11, n_samples=3))
+        r2 = evaluate_move(_move_request(seed=11, n_samples=3))
+        assert r1.recommendation.recommended_action == r2.recommendation.recommended_action
+
+    def test_invalid_trick_size_raises(self) -> None:
+        with pytest.raises(ValueError, match="exactly 5"):
+            evaluate_move(
+                _move_request(completed_trick_strs=("0:T21|1:T20",), current_trick_str="")
+            )

@@ -156,6 +156,75 @@ def parse_hand_string(hand_str: str) -> list[Card]:
     return parse_cards(tokens)
 
 
+def parse_trick_card(token: str):
+    """Parse one trick-entry token formatted as '<player_index>:<card>'."""
+    normalised = token.strip()
+    if not normalised:
+        raise ValueError("Trick-card token must not be empty.")
+    if ":" not in normalised:
+        raise ValueError(
+            f"Cannot parse trick-card token '{token}'. Expected format '<player_index>:<card>'."
+        )
+    player_raw, card_raw = normalised.split(":", 1)
+    try:
+        player_index = int(player_raw.strip())
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid player index in trick-card token '{token}': '{player_raw.strip()}'."
+        ) from exc
+    if not (0 <= player_index <= 4):
+        raise ValueError(
+            f"player_index must be in [0, 4] in trick-card token '{token}', got {player_index}."
+        )
+    from tarot_engine.domain.rules import TrickCard
+
+    return TrickCard(card=parse_card(card_raw.strip()), player_index=player_index)
+
+
+def parse_trick_string(trick_str: str):
+    """Parse a '|' separated trick string into ordered TrickCard entries.
+
+    Example:
+        '0:T21|1:KH|2:QH'
+    """
+    if not trick_str.strip():
+        return ()
+    tokens = [token.strip() for token in trick_str.split("|") if token.strip()]
+    return tuple(parse_trick_card(token) for token in tokens)
+
+
+def format_card_token(card: Card) -> str:
+    """Return a canonical parseable token for a Card."""
+    if card.is_excuse:
+        return "EXCUSE"
+    if card.is_trump:
+        return f"T{card.trump_value}"
+    assert card.suit is not None and card.rank is not None
+    suit_token = {
+        Suit.SPADES: "S",
+        Suit.HEARTS: "H",
+        Suit.DIAMONDS: "D",
+        Suit.CLUBS: "C",
+    }[card.suit]
+    rank_token = {
+        Rank.AS: "AS",
+        Rank.TWO: "2",
+        Rank.THREE: "3",
+        Rank.FOUR: "4",
+        Rank.FIVE: "5",
+        Rank.SIX: "6",
+        Rank.SEVEN: "7",
+        Rank.EIGHT: "8",
+        Rank.NINE: "9",
+        Rank.TEN: "10",
+        Rank.VALET: "J",
+        Rank.CAVALIER: "C",
+        Rank.DAME: "Q",
+        Rank.ROI: "K",
+    }[card.rank]
+    return f"{rank_token}{suit_token}"
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------

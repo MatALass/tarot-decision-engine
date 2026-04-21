@@ -1,18 +1,19 @@
-"""Tests for utils/parsing.py — syntactic string-to-Card parsing.
-
-These tests verify ONLY the parsing logic, not any domain rules.
-"""
+"""Tests for utils/parsing.py — syntactic string-to-Card parsing."""
 
 import pytest
 
 from tarot_engine.domain.cards import Card
 from tarot_engine.domain.enums import Rank, Suit
-from tarot_engine.utils.parsing import parse_card, parse_cards, parse_hand_string
+from tarot_engine.utils.parsing import (
+    parse_card,
+    parse_cards,
+    parse_hand_string,
+    parse_trick_card,
+    parse_trick_string,
+)
 
 
 class TestParseCard:
-    # --- Trumps ---
-
     def test_parse_trump_single_digit(self) -> None:
         card = parse_card("T1")
         assert card == Card.trump(1)
@@ -34,8 +35,6 @@ class TestParseCard:
         with pytest.raises(ValueError):
             parse_card("T22")
 
-    # --- Excuse ---
-
     def test_parse_excuse_full(self) -> None:
         assert parse_card("EXCUSE") == Card.excuse()
 
@@ -47,8 +46,6 @@ class TestParseCard:
 
     def test_parse_excuse_case_insensitive(self) -> None:
         assert parse_card("excuse") == Card.excuse()
-
-    # --- Suited cards ---
 
     def test_parse_king_of_hearts(self) -> None:
         assert parse_card("KH") == Card.suited(Suit.HEARTS, Rank.ROI)
@@ -83,8 +80,6 @@ class TestParseCard:
     def test_parse_with_whitespace(self) -> None:
         assert parse_card("  T21  ") == Card.trump(21)
 
-    # --- Invalid inputs ---
-
     def test_empty_string_raises(self) -> None:
         with pytest.raises(ValueError, match="empty"):
             parse_card("")
@@ -99,11 +94,11 @@ class TestParseCard:
 
     def test_lone_suit_raises(self) -> None:
         with pytest.raises(ValueError):
-            parse_card("H")  # suit without rank
+            parse_card("H")
 
     def test_rank_without_suit_raises(self) -> None:
         with pytest.raises(ValueError):
-            parse_card("K")  # rank without suit
+            parse_card("K")
 
 
 class TestParseCards:
@@ -146,7 +141,6 @@ class TestParseHandString:
         assert len(cards) == HAND_SIZE
 
     def test_integration_parse_then_build_hand(self) -> None:
-        """Parsing then building a Hand must work end-to-end."""
         from tarot_engine.domain.deck import generate_deck, HAND_SIZE
         from tarot_engine.domain.hand import Hand
 
@@ -155,3 +149,25 @@ class TestParseHandString:
         cards = parse_hand_string(",".join(tokens))
         hand = Hand.from_cards(cards)
         assert len(hand) == HAND_SIZE
+
+
+class TestParseTrickCard:
+    def test_valid_trick_card(self) -> None:
+        trick_card = parse_trick_card("3:KH")
+        assert trick_card.player_index == 3
+        assert trick_card.card == Card.suited(Suit.HEARTS, Rank.ROI)
+
+    def test_invalid_format_raises(self) -> None:
+        with pytest.raises(ValueError, match="<player_index>:<card>"):
+            parse_trick_card("KH")
+
+
+class TestParseTrickString:
+    def test_valid_trick_string(self) -> None:
+        trick = parse_trick_string("0:T21|1:KH|2:EXCUSE")
+        assert len(trick) == 3
+        assert trick[0].player_index == 0
+        assert trick[1].card == Card.suited(Suit.HEARTS, Rank.ROI)
+
+    def test_empty_string_returns_empty_tuple(self) -> None:
+        assert parse_trick_string("") == ()

@@ -2,13 +2,13 @@
 
 import json
 
-import pytest
 from typer.testing import CliRunner
 
 from tarot_engine.cli.main import app
 from tarot_engine.domain.cards import Card
 from tarot_engine.domain.deck import generate_deck
 from tarot_engine.domain.enums import Contract
+from tarot_engine.utils.parsing import format_card_token
 
 runner = CliRunner()
 
@@ -20,10 +20,34 @@ def _hand_str() -> str:
     return ",".join(str(c) for c in bouts + fillers)
 
 
+def _move_base() -> list[str]:
+    deck = generate_deck()
+    remaining = ",".join(format_card_token(card) for card in (deck[13], deck[14]))
+    other_cards = iter(deck[15:])
+    args = [
+        "recommend-move",
+        "--remaining-hand", remaining,
+        "--contract", "GARDE",
+        "--player-index", "0",
+        "--taker-index", "0",
+    ]
+    for trick_index in range(13):
+        entries = [f"0:{format_card_token(deck[trick_index])}"]
+        for player_index in range(1, 5):
+            entries.append(f"{player_index}:{format_card_token(next(other_cards))}")
+        args.extend(["--completed-trick", "|".join(entries)])
+    args.extend([
+        "--current-trick", f"4:{format_card_token(next(other_cards))}",
+        "--next-player-index", "0",
+        "--n-samples", "5",
+        "--seed", "7",
+    ])
+    return args
+
+
 HAND = _hand_str()
-# The CLI is structured as: tarot-engine evaluate-hand [OPTIONS]
-# CliRunner must include the subcommand name in args.
 BASE = ["evaluate-hand", "--hand", HAND, "--n-simulations", "20", "--seed", "42"]
+MOVE_BASE = _move_base()
 
 
 class TestEvaluateHandBasic:
@@ -111,6 +135,26 @@ class TestPolicies:
         assert "1.5" in data["policy_name"]
 
 
+class TestMoveRecommendation:
+    def test_exits_zero(self) -> None:
+        assert runner.invoke(app, MOVE_BASE).exit_code == 0
+
+    def test_output_contains_recommended_card(self) -> None:
+        out = runner.invoke(app, MOVE_BASE).output
+        assert "Recommended card" in out
+
+    def test_json_output_valid(self) -> None:
+        result = runner.invoke(app, MOVE_BASE + ["--output", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert "recommended_action" in data
+        assert "actions" in data
+
+    def test_json_recommended_action_player_matches(self) -> None:
+        data = json.loads(runner.invoke(app, MOVE_BASE + ["--output", "json"]).output)
+        assert data["recommended_action"]["player_index"] == 0
+
+
 class TestErrorHandling:
     def test_invalid_card_exits_nonzero(self) -> None:
         result = runner.invoke(app, [
@@ -123,5 +167,17 @@ class TestErrorHandling:
         result = runner.invoke(app, [
             "evaluate-hand", "--hand", "T21,KH,EXCUSE",
             "--n-simulations", "5", "--seed", "0",
+        ])
+        assert result.exit_code != 0
+
+    def test_invalid_completed_trick_exits_nonzero(self) -> None:
+        result = runner.invoke(app, [
+            "recommend-move",
+            "--remaining-hand", "T1,KH",
+            "--contract", "GARDE",
+            "--player-index", "0",
+            "--taker-index", "0",
+            "--completed-trick", "0:T21|1:T20",
+            "--next-player-index", "0",
         ])
         assert result.exit_code != 0
