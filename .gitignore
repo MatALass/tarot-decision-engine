@@ -1,9 +1,70 @@
+# =========================
+# Python
+# =========================
+
 .venv/
+venv/
+env/
+
 __pycache__/
+*.py[cod]
+*$py.class
+
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
 .coverage
+coverage.xml
 htmlcov/
-*.pyc
+
 dist/
 build/
 *.egg-info/
+
+# =========================
+# Environment / secrets
+# =========================
+
+.env
+.env.*
+!.env.example
+
+# =========================
+# Frontend / Node / Vite / Vue
+# =========================
+
+node_modules/
+frontend/node_modules/
+
+frontend/dist/
+frontend/build/
+
+*.tsbuildinfo
+frontend/**/*.tsbuildinfo
+
+# Generated TypeScript/Vue outputs
+frontend/src/**/*.js
+frontend/src/**/*.d.ts
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# =========================
+# Logs
+# =========================
+
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# OS / IDE
+# =========================
+
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
